@@ -68,6 +68,7 @@ import com.seafile.seadroid2.enums.OpType;
 import com.seafile.seadroid2.enums.RefreshStatusEnum;
 import com.seafile.seadroid2.enums.SortBy;
 import com.seafile.seadroid2.framework.datastore.DataManager;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.seafile.seadroid2.framework.db.entities.DirentModel;
 import com.seafile.seadroid2.framework.db.entities.PermissionEntity;
 import com.seafile.seadroid2.framework.db.entities.RepoModel;
@@ -214,6 +215,14 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
         binding = LayoutFastRvBinding.inflate(inflater, container, false);
 
         binding.swipeRefreshLayout.setOnRefreshListener(() -> {
+            NetworkMonitor.getInstance().refreshConnectivity();
+            if (!NetworkMonitor.getInstance().isOnline()) {
+                binding.swipeRefreshLayout.setRefreshing(false);
+                if (adapter != null) {
+                    adapter.notifyOfflineStateChanged();
+                }
+                return;
+            }
             removeScrolledPosition();
             loadData(RefreshStatusEnum.ONLY_REMOTE, false);
         });
@@ -738,7 +747,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
             closeActionMode();
 
             if (aBoolean) {
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
 
                 // notify starred list need to change
                 Bundle bundle = new Bundle();
@@ -769,7 +778,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
         });
 
         mainViewModel.getOnForceRefreshRepoListLiveData().observe(getViewLifecycleOwner(), aBoolean -> {
-            loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+            reloadAfterMutation();
         });
 
         getViewModel().getSearchListLiveData().observe(getViewLifecycleOwner(), new Observer<List<SearchModel>>() {
@@ -829,6 +838,14 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
                 enableBackDispatcher(canGoBack());
             }
         });
+
+        NetworkMonitor.getInstance().getConnectivityLiveData().observe(getViewLifecycleOwner(), isOnline -> {
+            binding.offlineBanner.setVisibility(isOnline ? View.GONE : View.VISIBLE);
+
+            if (adapter != null) {
+                adapter.notifyOfflineStateChanged();
+            }
+        });
     }
 
 
@@ -870,7 +887,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
 
         } else if (TextUtils.equals(statusEvent, TransferEvent.EVENT_TRANSFER_TASK_COMPLETE)) {
             if (transferCount > 0) {
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
             }
         } else if (TextUtils.equals(statusEvent, TransferEvent.EVENT_TRANSFER_TASK_CANCELLED)) {
 
@@ -880,7 +897,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
                 Toasts.show(R.string.download_cancelled);
             }
 
-            loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+            reloadAfterMutation();
         }
     }
 
@@ -1152,8 +1169,12 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
     }
 
     private void showEmptyView() {
-        if (!NetworkUtils.isConnected()) {
-            showErrorView(SeafException.NETWORK_UNAVAILABLE);
+        if (!NetworkMonitor.getInstance().isOnline()) {
+            if (GlobalNavContext.getCurrentNavContext().inRepo()) {
+                showErrorView(R.string.file_not_available_offline);
+            } else {
+                showErrorView(R.string.network_unavailable);
+            }
         } else {
             FileViewType type = Settings.FILE_LIST_VIEW_TYPE.queryValue();
             if (FileViewType.GALLERY == type) {
@@ -1195,6 +1216,10 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
     }
 
     private RefreshStatusEnum getRefreshStatus() {
+        if (!NetworkMonitor.getInstance().isOnline()) {
+            return RefreshStatusEnum.ONLY_LOCAL;
+        }
+
         String key;
         RepoModel repoModel = GlobalNavContext.getCurrentNavContext().getRepoModel();
         if (repoModel == null) {
@@ -1221,6 +1246,14 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
         return RefreshStatusEnum.LOCAL_THEN_REMOTE;
     }
 
+    private void reloadAfterMutation() {
+        if (NetworkMonitor.getInstance().isOnline()) {
+            loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+        } else {
+            loadData(RefreshStatusEnum.ONLY_LOCAL, false);
+        }
+    }
+
     private void navTo(BaseModel model) {
         //save
         if (model instanceof RepoModel repoModel) {
@@ -1239,9 +1272,18 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
 
         } else if (model instanceof DirentModel direntModel) {
             if (direntModel.isDir()) {
+                if (direntModel.cached_children_count == 0 && !NetworkMonitor.getInstance().isOnline()) {
+                    Toasts.show(R.string.file_not_available_offline);
+                    return;
+                }
                 GlobalNavContext.push(direntModel);
                 loadData(getRefreshStatus(), true);
             } else {
+                boolean isOffline = TextUtils.equals(direntModel.id, direntModel.local_file_id);
+                if (!isOffline && !NetworkMonitor.getInstance().isOnline()) {
+                    Toasts.show(R.string.file_not_available_offline);
+                    return;
+                }
                 RepoModel repoModel = GlobalNavContext.getCurrentNavContext().getRepoModel();
                 open(repoModel, direntModel);
             }
@@ -1690,6 +1732,12 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
             return;
         }
 
+        boolean isOffline = TextUtils.equals(dirent.id, dirent.local_file_id);
+        if (!isOffline && !NetworkMonitor.getInstance().isOnline()) {
+            Toasts.show(R.string.file_not_available_offline);
+            return;
+        }
+
         String fileName = dirent.name;
         String filePath = dirent.full_path;
 
@@ -1823,7 +1871,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
                     Toasts.show(R.string.rename_successful);
                 }
 
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
             }
         });
         dialogFragment.show(getChildFragmentManager(), BottomSheetRenameDialogFragment.class.getSimpleName());
@@ -1842,7 +1890,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
             }
 
             closeActionMode();
-            loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+            reloadAfterMutation();
         });
         dialogFragment.show(getChildFragmentManager(), DeleteRepoDialogFragment.class.getSimpleName());
     }
@@ -1863,7 +1911,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
 
                 closeActionMode();
 
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
             }
         });
         dialogFragment.show(getChildFragmentManager(), DeleteFileDialogFragment.class.getSimpleName());
@@ -2156,7 +2204,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
             @Override
             public void onActivityResult(ActivityResult o) {
                 if (o.getResultCode() != Activity.RESULT_OK) {
-                    loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                    reloadAfterMutation();
                     return;
                 }
 
@@ -2179,7 +2227,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
                     Toasts.show(R.string.download_finished);
                 }
 
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
 
                 File destinationFile = new File(localFullPath);
                 if (TextUtils.equals(FileReturnActionEnum.EXPORT.name(), action)) {
@@ -2310,7 +2358,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
                     Toasts.show(copyMoveContext.isCopy() ? R.string.copied_successfully : R.string.moved_successfully);
                 }
 
-                loadData(RefreshStatusEnum.ONLY_REMOTE, false);
+                reloadAfterMutation();
             }
         });
         dialogFragment.show(getChildFragmentManager(), CopyMoveDialogFragment.class.getSimpleName());

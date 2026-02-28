@@ -93,9 +93,13 @@ public interface DirentDAO {
                 d.encoded_thumbnail_src,
                 d.last_modified_at,
                 d.transfer_status,
-            
-                f.file_id AS local_file_id
-            
+
+                f.file_id AS local_file_id,
+
+                CASE WHEN d.type = 'dir' THEN
+                    (SELECT COUNT(*) FROM dirents d2 WHERE d2.repo_id = d.repo_id AND d2.parent_dir = d.full_path || '/')
+                ELSE 0 END AS cached_children_count
+
             FROM dirents d
             LEFT JOIN file_cache_status f
             ON d.repo_id = f.repo_id AND d.full_path = f.full_path

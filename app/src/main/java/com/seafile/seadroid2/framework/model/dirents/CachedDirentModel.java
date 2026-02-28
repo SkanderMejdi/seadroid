@@ -11,4 +11,6 @@ public class CachedDirentModel {
 
     @Nullable
     public String local_file_id;
+
+    public int cached_children_count;
 }

@@ -39,6 +39,7 @@ import com.seafile.seadroid2.framework.db.entities.DirentModel;
 import com.seafile.seadroid2.framework.db.entities.RepoModel;
 import com.seafile.seadroid2.framework.glide.GlideApp;
 import com.seafile.seadroid2.framework.http.HttpIO;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.seafile.seadroid2.framework.model.BaseModel;
 import com.seafile.seadroid2.framework.model.GroupItemModel;
 import com.seafile.seadroid2.framework.model.search.SearchModel;
@@ -63,6 +64,28 @@ import java.util.stream.Collectors;
 public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
     private final String KEY_PAY_LOAD_IS_CHECK = "is_check";
     private final String KEY_PAY_LOAD_KEY_REFRESH_LOCAL_FILE_STATUS = "refresh_local_file_status";
+
+    private float getOfflineAlpha(DirentModel model) {
+        if (NetworkMonitor.getInstance().isOnline()) {
+            return 1.0f;
+        }
+        if (model.isDir()) {
+            return model.cached_children_count > 0 ? 1.0f : 0.4f;
+        }
+        return TextUtils.equals(model.id, model.local_file_id) ? 1.0f : 0.4f;
+    }
+
+    /**
+     * Notify all items to refresh their offline alpha and local file status.
+     * Uses a payload to avoid RecyclerView's default change animation which resets alpha to 1.0f.
+     */
+    public void notifyOfflineStateChanged() {
+        if (getItemCount() > 0) {
+            Bundle payload = new Bundle();
+            payload.putBoolean(KEY_PAY_LOAD_KEY_REFRESH_LOCAL_FILE_STATUS, true);
+            notifyItemRangeChanged(0, getItemCount(), payload);
+        }
+    }
 
     private boolean onActionMode;
 
@@ -400,6 +423,7 @@ public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
                     } else {
                         holder.binding.itemDownloadStatus.setVisibility(View.GONE);
                     }
+                    holder.itemView.setAlpha(getOfflineAlpha(model));
                 }
             }
             return;
@@ -471,6 +495,7 @@ public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
         } else {
             holder.binding.itemDownloadStatus.setVisibility(View.GONE);
         }
+        holder.itemView.setAlpha(getOfflineAlpha(model));
 
         holder.binding.itemTitle.setCompoundDrawablePadding(Constants.DP.DP_4);
         holder.binding.itemTitle.setCompoundDrawables(null, null, model.starred ? starDrawable : null, null);
@@ -496,6 +521,7 @@ public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
                     } else {
                         holder.binding.itemDownloadStatus.setVisibility(View.GONE);
                     }
+                    holder.itemView.setAlpha(getOfflineAlpha(model));
                 }
             }
 
@@ -536,6 +562,7 @@ public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
         } else {
             holder.binding.itemDownloadStatus.setVisibility(View.GONE);
         }
+        holder.itemView.setAlpha(getOfflineAlpha(model));
 
         holder.binding.itemTitle.setCompoundDrawablePadding(Constants.DP.DP_4);
         holder.binding.itemTitle.setCompoundDrawables(null, null, model.starred ? starDrawable : null, null);
@@ -567,6 +594,8 @@ public class RepoQuickAdapter extends BaseMultiAdapter<BaseModel> {
         }
 
         updateItemMultiSelectView(holder.binding.itemMultiSelect, model);
+
+        holder.itemView.setAlpha(getOfflineAlpha(model));
     }
 
     private void updateItemMultiSelectViewWithPayload(ImageView imageView, boolean isChecked) {

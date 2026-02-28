@@ -641,6 +641,8 @@
     <string name="is_uploading">Uploading</string>
     <string name="network_unavailable">Network unavailable</string>
     <string name="network_error">Network error</string>
+    <string name="file_not_available_offline">This file is not available offline</string>
+    <string name="offline_mode">Offline mode</string>
     <string name="error_image_load">Load failed</string>
     <string name="retry_with_click">click to retry</string>
 

@@ -8,18 +8,25 @@ import android.util.Log;
 import androidx.annotation.BoolRes;
 import androidx.annotation.IntegerRes;
 import androidx.annotation.StringRes;
-import androidx.work.Configuration;
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
 import com.jeremyliao.liveeventbus.LiveEventBus;
 import com.seafile.seadroid2.framework.monitor.ActivityMonitor;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.seafile.seadroid2.framework.notification.base.NotificationUtils;
+import com.seafile.seadroid2.framework.worker.MetadataSyncWorker;
 import com.seafile.seadroid2.framework.util.CrashHandler;
 import com.seafile.seadroid2.framework.util.SLogs;
 import com.seafile.seadroid2.framework.util.SafeLogs;
 import com.seafile.seadroid2.preferences.Settings;
 import com.seafile.seadroid2.provider.DocumentCache;
 import com.seafile.seadroid2.ui.camera_upload.AlbumBackupAdapterBridge;
+
+import java.util.concurrent.TimeUnit;
 
 import io.reactivex.exceptions.UndeliverableException;
 import io.reactivex.functions.Consumer;
@@ -65,6 +72,20 @@ public class SeadroidApplication extends Application {
 
         //This feature can be extended
         registerActivityLifecycleCallbacks(new ActivityMonitor());
+
+        NetworkMonitor.getInstance().register(this);
+
+        Constraints syncConstraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+        PeriodicWorkRequest metadataSyncRequest = new PeriodicWorkRequest.Builder(
+                MetadataSyncWorker.class, 30, TimeUnit.MINUTES)
+                .setConstraints(syncConstraints)
+                .build();
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                "metadata_sync",
+                ExistingPeriodicWorkPolicy.KEEP,
+                metadataSyncRequest);
 
         RxJavaPlugins.setErrorHandler(new Consumer<Throwable>() {
             @Override

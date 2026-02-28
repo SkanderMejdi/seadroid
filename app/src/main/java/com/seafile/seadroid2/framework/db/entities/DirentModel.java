@@ -84,6 +84,9 @@ public class DirentModel extends BaseModel implements Parcelable {
     public String local_file_id;
 
     @Ignore
+    public int cached_children_count;
+
+    @Ignore
     private String timestamp;
 
     @Ignore

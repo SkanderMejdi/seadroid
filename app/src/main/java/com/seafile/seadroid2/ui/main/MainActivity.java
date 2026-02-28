@@ -48,6 +48,7 @@ import com.seafile.seadroid2.enums.NightMode;
 import com.seafile.seadroid2.framework.file_monitor.FileDaemonService;
 import com.seafile.seadroid2.framework.file_monitor.FileSyncService;
 import com.seafile.seadroid2.framework.model.ServerInfo;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.seafile.seadroid2.framework.util.PermissionUtil;
 import com.seafile.seadroid2.framework.util.SLogs;
 import com.seafile.seadroid2.framework.util.Toasts;
@@ -182,11 +183,13 @@ public class MainActivity extends BaseActivity {
     private final NetworkUtils.OnNetworkStatusChangedListener onNetworkStatusChangedListener = new NetworkUtils.OnNetworkStatusChangedListener() {
         @Override
         public void onDisconnected() {
+            NetworkMonitor.getInstance().refreshConnectivity();
             refreshActionbar();
         }
 
         @Override
         public void onConnected(NetworkUtils.NetworkType networkType) {
+            NetworkMonitor.getInstance().refreshConnectivity();
             refreshActionbar();
         }
     };

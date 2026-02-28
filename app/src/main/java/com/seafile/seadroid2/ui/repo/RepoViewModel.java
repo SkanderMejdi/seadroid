@@ -8,6 +8,7 @@ import androidx.lifecycle.MutableLiveData;
 
 import com.blankj.utilcode.util.CollectionUtils;
 import com.blankj.utilcode.util.NetworkUtils;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.blankj.utilcode.util.TimeUtils;
 import com.seafile.seadroid2.SeafException;
 import com.seafile.seadroid2.account.Account;
@@ -306,7 +307,7 @@ public class RepoViewModel extends BaseViewModel {
             public void accept(List<BaseModel> list) {
                 getObjListLiveData().setValue(list);
 
-                if (isLoadRemoteData && NetworkUtils.isConnected()) {
+                if (isLoadRemoteData && NetworkMonitor.getInstance().isOnline()) {
                     loadReposFromRemote(account);
                 } else {
                     getShowEmptyViewLiveData().setValue(CollectionUtils.isEmpty(list));
@@ -321,7 +322,7 @@ public class RepoViewModel extends BaseViewModel {
     }
 
     private void loadReposFromRemote(Account account) {
-        if (!NetworkUtils.isConnected()) {
+        if (!NetworkMonitor.getInstance().isOnline()) {
             getRefreshLiveData().setValue(false);
             return;
         }
@@ -343,13 +344,18 @@ public class RepoViewModel extends BaseViewModel {
             public void accept(Throwable throwable) throws Exception {
                 getRefreshLiveData().setValue(false);
 
+                if (throwable instanceof java.net.ConnectException) {
+                    NetworkMonitor.getInstance().refreshConnectivity();
+                    return;
+                }
+
                 SeafException seafException = getSeafExceptionByThrowable(throwable);
                 if (seafException == SeafException.REMOTE_WIPED_EXCEPTION) {
                     //post a request
                     completeRemoteWipe();
+                    getObjListLiveData().setValue(null);
                 }
 
-                getObjListLiveData().setValue(null);
                 getSeafExceptionLiveData().setValue(seafException);
 
             }
@@ -401,7 +407,7 @@ public class RepoViewModel extends BaseViewModel {
 
                 getObjListLiveData().setValue(results);
 
-                if (isLoadRemoteData && NetworkUtils.isConnected()) {
+                if (isLoadRemoteData && NetworkMonitor.getInstance().isOnline()) {
                     loadDirentsFromRemote(account, navContext);
                 } else {
                     getShowEmptyViewLiveData().setValue(CollectionUtils.isEmpty(results));
@@ -434,6 +440,7 @@ public class RepoViewModel extends BaseViewModel {
                     @Override
                     public DirentModel apply(CachedDirentModel cachedDirentModel) {
                         cachedDirentModel.dirent.local_file_id = cachedDirentModel.local_file_id;
+                        cachedDirentModel.dirent.cached_children_count = cachedDirentModel.cached_children_count;
                         return cachedDirentModel.dirent;
                     }
                 }).collect(Collectors.toList());
@@ -444,7 +451,7 @@ public class RepoViewModel extends BaseViewModel {
     }
 
     private void loadDirentsFromRemote(Account account, NavContext navContext) {
-        if (!NetworkUtils.isConnected()) {
+        if (!NetworkMonitor.getInstance().isOnline()) {
             getRefreshLiveData().setValue(false);
             return;
         }
@@ -491,13 +498,18 @@ public class RepoViewModel extends BaseViewModel {
             public void accept(Throwable throwable) throws Exception {
                 getRefreshLiveData().setValue(false);
 
+                if (throwable instanceof java.net.ConnectException) {
+                    NetworkMonitor.getInstance().refreshConnectivity();
+                    return;
+                }
+
                 SeafException seafException = getSeafExceptionByThrowable(throwable);
                 if (seafException == SeafException.REMOTE_WIPED_EXCEPTION) {
                     //post a request
                     completeRemoteWipe();
+                    getObjListLiveData().setValue(null);
                 }
 
-                getObjListLiveData().setValue(null);
                 getSeafExceptionLiveData().setValue(seafException);
             }
         });

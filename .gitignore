@@ -72,3 +72,4 @@ build_count.txt
 /.claude
 /.kotlin
 CLAUDE.md
+.grepai/
