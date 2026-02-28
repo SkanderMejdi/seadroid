@@ -7,8 +7,6 @@ import android.util.Pair;
 import androidx.lifecycle.MutableLiveData;
 
 import com.blankj.utilcode.util.CollectionUtils;
-import com.blankj.utilcode.util.NetworkUtils;
-import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.blankj.utilcode.util.TimeUtils;
 import com.seafile.seadroid2.SeafException;
 import com.seafile.seadroid2.account.Account;
@@ -25,6 +23,7 @@ import com.seafile.seadroid2.framework.db.entities.EncKeyCacheEntity;
 import com.seafile.seadroid2.framework.db.entities.PermissionEntity;
 import com.seafile.seadroid2.framework.db.entities.RepoModel;
 import com.seafile.seadroid2.framework.http.HttpIO;
+import com.seafile.seadroid2.framework.network.NetworkMonitor;
 import com.seafile.seadroid2.framework.model.BaseModel;
 import com.seafile.seadroid2.framework.model.ResultModel;
 import com.seafile.seadroid2.framework.model.dirents.CachedDirentModel;
@@ -47,6 +46,8 @@ import com.seafile.seadroid2.ui.search.SearchService;
 import com.seafile.seadroid2.ui.star.StarredService;
 
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -342,22 +343,7 @@ public class RepoViewModel extends BaseViewModel {
         }, new Consumer<Throwable>() {
             @Override
             public void accept(Throwable throwable) throws Exception {
-                getRefreshLiveData().setValue(false);
-
-                if (throwable instanceof java.net.ConnectException) {
-                    NetworkMonitor.getInstance().refreshConnectivity();
-                    return;
-                }
-
-                SeafException seafException = getSeafExceptionByThrowable(throwable);
-                if (seafException == SeafException.REMOTE_WIPED_EXCEPTION) {
-                    //post a request
-                    completeRemoteWipe();
-                    getObjListLiveData().setValue(null);
-                }
-
-                getSeafExceptionLiveData().setValue(seafException);
-
+                handleRemoteLoadError(throwable);
             }
         });
     }
@@ -496,23 +482,26 @@ public class RepoViewModel extends BaseViewModel {
         }, new Consumer<Throwable>() {
             @Override
             public void accept(Throwable throwable) throws Exception {
-                getRefreshLiveData().setValue(false);
-
-                if (throwable instanceof java.net.ConnectException) {
-                    NetworkMonitor.getInstance().refreshConnectivity();
-                    return;
-                }
-
-                SeafException seafException = getSeafExceptionByThrowable(throwable);
-                if (seafException == SeafException.REMOTE_WIPED_EXCEPTION) {
-                    //post a request
-                    completeRemoteWipe();
-                    getObjListLiveData().setValue(null);
-                }
-
-                getSeafExceptionLiveData().setValue(seafException);
+                handleRemoteLoadError(throwable);
             }
         });
+    }
+
+    private void handleRemoteLoadError(Throwable throwable) throws IOException {
+        getRefreshLiveData().setValue(false);
+
+        if (throwable instanceof ConnectException || throwable instanceof SocketTimeoutException) {
+            NetworkMonitor.getInstance().refreshConnectivity();
+            return;
+        }
+
+        SeafException seafException = getSeafExceptionByThrowable(throwable);
+        if (seafException == SeafException.REMOTE_WIPED_EXCEPTION) {
+            completeRemoteWipe();
+            getObjListLiveData().setValue(null);
+        }
+
+        getSeafExceptionLiveData().setValue(seafException);
     }
 
     public void getEncCacheDB(String repoId, Consumer<EncKeyCacheEntity> consumer) {

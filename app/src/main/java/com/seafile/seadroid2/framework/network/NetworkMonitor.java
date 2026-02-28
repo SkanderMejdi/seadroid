@@ -5,14 +5,15 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 
 import androidx.annotation.NonNull;
-import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import com.blankj.utilcode.util.NetworkUtils;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.account.SupportAccountManager;
+import com.seafile.seadroid2.framework.util.SLogs;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -20,11 +21,16 @@ import okhttp3.Response;
 
 public class NetworkMonitor {
 
-    private static final NetworkMonitor INSTANCE = new NetworkMonitor();
+    private static final String TAG = "NetworkMonitor";
 
-    private volatile boolean serverReachable = true;
+    private final AtomicBoolean serverReachable = new AtomicBoolean(true);
 
-    private final MutableLiveData<Boolean> connectivityLiveData = new MutableLiveData<Boolean>(true) {
+    private final OkHttpClient pingClient = new OkHttpClient.Builder()
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
+            .build();
+
+    private final MutableLiveData<Boolean> _connectivityLiveData = new MutableLiveData<Boolean>(true) {
         @Override
         protected void onActive() {
             super.onActive();
@@ -36,7 +42,11 @@ public class NetworkMonitor {
     }
 
     public static NetworkMonitor getInstance() {
-        return INSTANCE;
+        return SingletonHolder.INSTANCE;
+    }
+
+    private static class SingletonHolder {
+        private static final NetworkMonitor INSTANCE = new NetworkMonitor();
     }
 
     public void register(@NonNull Context context) {
@@ -45,10 +55,8 @@ public class NetworkMonitor {
             return;
         }
 
-        // Initial check including server ping
         checkConnectivity();
 
-        // Use callback only as a trigger to re-check
         cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
             @Override
             public void onAvailable(@NonNull Network network) {
@@ -57,31 +65,28 @@ public class NetworkMonitor {
 
             @Override
             public void onLost(@NonNull Network network) {
-                serverReachable = true;
-                connectivityLiveData.postValue(false);
+                serverReachable.set(true);
+                _connectivityLiveData.postValue(false);
             }
         });
     }
 
-    public LiveData<Boolean> getConnectivityLiveData() {
-        return connectivityLiveData;
+    public MutableLiveData<Boolean> getConnectivityLiveData() {
+        return _connectivityLiveData;
     }
 
-    /**
-     * Force a re-check of connectivity and notify LiveData observers if state changed.
-     */
     public void refreshConnectivity() {
         checkConnectivity();
     }
 
     public boolean isOnline() {
-        return NetworkUtils.isConnected() && serverReachable;
+        return NetworkUtils.isConnected() && serverReachable.get();
     }
 
     private void checkConnectivity() {
         if (!NetworkUtils.isConnected()) {
-            serverReachable = true;
-            connectivityLiveData.postValue(false);
+            serverReachable.set(true);
+            _connectivityLiveData.postValue(false);
             return;
         }
         pingServer();
@@ -90,26 +95,24 @@ public class NetworkMonitor {
     private void pingServer() {
         Account account = SupportAccountManager.getInstance().getCurrentAccount();
         if (account == null) {
-            serverReachable = true;
-            connectivityLiveData.postValue(true);
+            serverReachable.set(true);
+            _connectivityLiveData.postValue(true);
             return;
         }
-        new Thread(() -> {
+
+        pingClient.dispatcher().executorService().execute(() -> {
             try {
-                OkHttpClient client = new OkHttpClient.Builder()
-                        .connectTimeout(3, TimeUnit.SECONDS)
-                        .readTimeout(3, TimeUnit.SECONDS)
-                        .build();
                 Request request = new Request.Builder()
                         .url(account.getServer() + "api2/ping/")
                         .build();
-                Response response = client.newCall(request).execute();
-                serverReachable = response.isSuccessful();
-                response.close();
+                try (Response response = pingClient.newCall(request).execute()) {
+                    serverReachable.set(response.isSuccessful());
+                }
             } catch (Exception e) {
-                serverReachable = false;
+                SLogs.d(TAG, "pingServer()", "Server unreachable: " + e.getMessage());
+                serverReachable.set(false);
             }
-            connectivityLiveData.postValue(isOnline());
-        }).start();
+            _connectivityLiveData.postValue(isOnline());
+        });
     }
 }

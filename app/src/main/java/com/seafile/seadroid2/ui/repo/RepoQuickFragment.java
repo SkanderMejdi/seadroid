@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.util.UnstableApi;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.SimpleItemAnimator;
 
 import com.blankj.utilcode.util.CollectionUtils;
 import com.blankj.utilcode.util.FileUtils;
@@ -269,6 +270,7 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
         super.onOtherResume();
 
         loadData(RefreshStatusEnum.ONLY_LOCAL, false);
+        adapter.notifyOfflineStateChanged();
     }
 
     private StickyItemDecoration decoration;
@@ -288,6 +290,11 @@ public class RepoQuickFragment extends BaseFragmentWithVM<RepoViewModel> {
     }
 
     private void initRv() {
+        RecyclerView.ItemAnimator animator = binding.rv.getItemAnimator();
+        if (animator instanceof SimpleItemAnimator) {
+            ((SimpleItemAnimator) animator).setSupportsChangeAnimations(false);
+        }
+
         binding.rv.addItemDecoration(getDecoration());
 
         binding.rv.addOnScrollListener(new RecyclerView.OnScrollListener() {

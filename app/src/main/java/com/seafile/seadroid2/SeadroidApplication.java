@@ -8,6 +8,7 @@ import android.util.Log;
 import androidx.annotation.BoolRes;
 import androidx.annotation.IntegerRes;
 import androidx.annotation.StringRes;
+import androidx.work.BackoffPolicy;
 import androidx.work.Constraints;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.NetworkType;
@@ -81,6 +82,7 @@ public class SeadroidApplication extends Application {
         PeriodicWorkRequest metadataSyncRequest = new PeriodicWorkRequest.Builder(
                 MetadataSyncWorker.class, 30, TimeUnit.MINUTES)
                 .setConstraints(syncConstraints)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.MINUTES)
                 .build();
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 "metadata_sync",
